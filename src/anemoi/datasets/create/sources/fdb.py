@@ -73,7 +73,7 @@ class FdbSource(Source):
 
         if "step" not in self.request:
             self.request["step"] = 0
-
+        self.request = {k: v for k, v in self.request.items() if v is not None}
         self.request["param"] = _shortname_to_paramid(fdb_request["param"], kwargs.pop("param_id_map", None))
 
         # temporary workarounds for FDB use at MeteoSwiss (adoption is ongoing)
