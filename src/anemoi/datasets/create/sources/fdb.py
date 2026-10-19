@@ -123,7 +123,7 @@ class FdbSource(Source):
 
         fl = FieldList()
         for request in requests:
-            fl = FieldList.concat(fl, FieldList.from_source("fdb", request, **self.configs, read_all=True))
+            fl = FieldList.concat(fl, FieldList.from_source("fdb", request, **self.configs, stream=False))
 
         if self.grid is not None:
             fl = FieldList.from_fields([Field.from_latitudes_longitudes(f, *self.grid.latlon()) for f in fl])
