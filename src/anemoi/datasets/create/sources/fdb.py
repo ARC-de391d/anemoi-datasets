@@ -71,6 +71,8 @@ class FdbSource(Source):
         else:
             self.grid = None
 
+        # `step: null` in the recipe means the archive has no step axis (e.g. Climate DT)
+        self.stepless = "step" in self.request and self.request["step"] is None
         if "step" not in self.request:
             self.request["step"] = 0
         self.request = {k: v for k, v in self.request.items() if v is not None}
@@ -100,6 +102,9 @@ class FdbSource(Source):
                 "Only grib_index is expected to produce base=None intervals."
             )
             _, r, _ = dates.adjust_request(interval, self.request)
+            if self.stepless:
+                # the interval is identified by the field's own stepRange metadata
+                r.pop("step", None)
             requests.append(r)
         return self._execute_requests(requests)
 
