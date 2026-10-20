@@ -8,6 +8,7 @@
 # nor does it submit to any jurisdiction.
 
 import numpy as np
+from anemoi.transform import Field
 from anemoi.transform import FieldList
 
 from . import source_registry
@@ -43,32 +44,25 @@ class AnemoiDatasetSource(LegacySource):
         results = []
 
         ensemble = ds.shape[2] > 1
-        latitudes = ds.latitudes
-        longitudes = ds.longitudes
-        resolution = ds.resolution
+        geography = {"latitudes": ds.latitudes, "longitudes": ds.longitudes}
 
+        # earthkit-data 1 builds fields from components; the legacy flat dicts
+        # (valid_datetime=, param=, number=, ...) passed to FieldList.from_dicts are rejected
+        # ("Field.from_components() got an unexpected keyword argument 'valid_datetime'").
         for idx, date in indices:
-
-            metadata = dict(valid_datetime=date, latitudes=latitudes, longitudes=longitudes, resolution=resolution)
-
             for j, y in enumerate(ds[idx]):
-
                 param = vars[j]
                 if param not in params:
                     continue
-
-                # metadata['name'] = param
-                # metadata['param_level'] = param
-                metadata["param"] = param
-
                 for k, e in enumerate(y):
+                    components = dict(
+                        values=e,
+                        time={"valid_datetime": date},
+                        parameter={"variable": param},
+                        geography=geography,
+                    )
                     if ensemble:
-                        metadata["number"] = k + 1
+                        components["ensemble"] = {"member": k + 1}
+                    results.append(Field.from_components(**components))
 
-                    metadata["values"] = e
-
-                    results.append(metadata.copy())
-
-        print(results[0].keys())
-
-        return FieldList.from_dicts(results)
+        return FieldList.from_fields(results)
