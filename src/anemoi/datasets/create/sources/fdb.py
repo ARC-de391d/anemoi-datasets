@@ -11,6 +11,7 @@ from datetime import datetime
 from datetime import timedelta
 from typing import Any
 
+import earthkit.data as ekd
 from anemoi.transform import Field
 from anemoi.transform import FieldList
 from anemoi.transform.flavour import RuleBasedFlavour
@@ -128,7 +129,11 @@ class FdbSource(Source):
 
         fl = FieldList()
         for request in requests:
-            fl = FieldList.concat(fl, FieldList.from_source("fdb", request, **self.configs, stream=False))
+            # earthkit-data 1 removed `read_all`; reading the stream into memory is its replacement
+            # (as in earthkit's own FDBRetriever). `stream=False` also works but goes through a
+            # temporary file and is ~2x slower against the remote FDB.
+            source = ekd.from_source("fdb", request, **self.configs, stream=True)
+            fl = FieldList.concat(fl, FieldList(source.to_fieldlist(read_all=True)))
 
         if self.grid is not None:
             fl = FieldList.from_fields([Field.from_latitudes_longitudes(f, *self.grid.latlon()) for f in fl])
