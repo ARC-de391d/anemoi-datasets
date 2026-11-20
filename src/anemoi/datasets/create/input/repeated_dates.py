@@ -17,6 +17,8 @@ import numpy as np
 from anemoi.utils.dates import as_datetime
 from anemoi.utils.dates import frequency_to_timedelta
 
+from anemoi.datasets.create.sources.reduce.source import _base_datetime
+
 LOG = logging.getLogger(__name__)
 
 
@@ -56,7 +58,14 @@ class DateMapper:
 class DateMapperClosest(DateMapper):
     """A DateMapper implementation that maps dates to the closest available dates."""
 
-    def __init__(self, source: Any, frequency: str = "1h", maximum: str = "30d", skip_all_nans: bool = False) -> None:
+    def __init__(
+        self,
+        source: Any,
+        frequency: str = "1h",
+        maximum: str = "30d",
+        skip_all_nans: bool = False,
+        request_by: str = "valid_datetime",
+    ) -> None:
         """Initialize DateMapperClosest.
 
         Parameters
@@ -69,13 +78,24 @@ class DateMapperClosest(DateMapper):
             Maximum time delta.
         skip_all_nans : bool
             Whether to skip all NaN values.
+        request_by : str
+            Which date of a found field is passed back to the source to retrieve it again:
+            ``valid_datetime`` (default, the previous behaviour) or ``base_datetime``. Closeness
+            is always measured to the field's valid time. ``base_datetime`` is needed for
+            sources that are queried by base date, e.g. a stepless FDB archive of time-means:
+            a daily mean requested with date D is valid at D+1 00 UTC, and requesting it again
+            by its valid time would return the next day's mean.
         """
+        if request_by not in ("valid_datetime", "base_datetime"):
+            raise ValueError(f"repeated_dates mode=closest: invalid request_by {request_by!r}")
         self.source: Any = source
         self.maximum: Any = frequency_to_timedelta(maximum)
         self.frequency: Any = frequency_to_timedelta(frequency)
         self.skip_all_nans: bool = skip_all_nans
+        self.request_by: str = request_by
         self.tried: set[Any] = set()
-        self.found: set[Any] = set()
+        # valid time of each field found -> the date to request it again with
+        self.found: dict[Any, Any] = {}
 
     def transform(self, context, group_of_dates: Any) -> Generator[tuple[Any, Any], None, None]:
         """Transform the group of dates to the closest available dates.
@@ -140,7 +160,10 @@ class DateMapperClosest(DateMapper):
                         continue
 
                 info[date] = "ok"
-                self.found.add(date)
+                if self.request_by == "base_datetime":
+                    self.found[date] = _base_datetime(f)
+                else:
+                    self.found[date] = date
 
             if cnt == 0:
                 raise ValueError(f"No data found for {group_of_dates} in {self.source}")
@@ -163,7 +186,7 @@ class DateMapperClosest(DateMapper):
                 # With <= we prefer the last date
                 if best is None or delta <= best[0]:
                     best = delta, found_date
-            new_dates[best[1]].append(date)
+            new_dates[self.found[best[1]]].append(date)
 
         for date, dates in new_dates.items():
             yield (
